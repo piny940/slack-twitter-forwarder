@@ -16,6 +16,9 @@ func Init() error {
 	healthCheckHandler := handler.NewHealthCheckHandler()
 	router.GET("", healthCheckHandler.Show)
 
+	slackHandler := handler.NewSlackHandler()
+	router.POST("/slack", slackHandler.Create)
+
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
