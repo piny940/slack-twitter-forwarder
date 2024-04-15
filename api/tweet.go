@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -53,10 +53,17 @@ func getOauthNonce() string {
 	return enc
 }
 
-func manualOauthSettings(creds *creds, additionalParam map[string]string, httpMethod, uri string) string {
+type credentials struct {
+	ConsumerKey       string
+	ConsumerSecret    string
+	AccessToken       string
+	AccessTokenSecret string
+}
+
+func getOauthAuth(creds *credentials, additionalParam map[string]string, httpMethod, uri string) string {
 	m := map[string]string{}
 	m["oauth_consumer_key"] = creds.ConsumerKey
-	m["oauth_nonce"] = createoauthNonce()
+	m["oauth_nonce"] = getOauthNonce()
 	m["oauth_signature_method"] = "HMAC-SHA1"
 	m["oauth_timestamp"] = strconv.FormatInt(time.Now().Unix(), 10)
 	m["oauth_token"] = creds.AccessToken
@@ -71,7 +78,7 @@ func manualOauthSettings(creds *creds, additionalParam map[string]string, httpMe
 
 	signatureBase := strings.Join(base, "&")
 
-	signatureKey := url.QueryEscape(creds.ConsumerSecret) + "&" + url.QueryEscape(creds.AccessSecret)
+	signatureKey := url.QueryEscape(creds.ConsumerSecret) + "&" + url.QueryEscape(creds.AccessTokenSecret)
 
 	m["oauth_signature"] = calcHMACSHA1(signatureBase, signatureKey)
 
@@ -88,11 +95,6 @@ func manualOauthSettings(creds *creds, additionalParam map[string]string, httpMe
 	return authHeader
 }
 
-type sortedQuery struct {
-	m    map[string]string
-	keys []string
-}
-
 func mapMerge(m1, m2 map[string]string) map[string]string {
 	m := map[string]string{}
 
@@ -106,20 +108,16 @@ func mapMerge(m1, m2 map[string]string) map[string]string {
 }
 
 func sortedQueryString(m map[string]string) string {
-	sq := &sortedQuery{
-		m:    m,
-		keys: make([]string, len(m)),
+	keys := make([]string, len(m))
+	for key, _ := range m {
+		keys = append(keys, key)
 	}
-	var i int
-	for key := range m {
-		sq.keys[i] = key
-		i++
-	}
-	sort.Strings(sq.keys)
 
-	values := make([]string, len(sq.keys))
-	for i, key := range sq.keys {
-		values[i] = fmt.Sprintf("%s=%s", url.QueryEscape(key), url.QueryEscape(sq.m[key]))
+	slices.Sort[[]string](keys)
+
+	values := make([]string, len(keys))
+	for i, key := range keys {
+		values[i] = fmt.Sprintf("%s=%s", url.QueryEscape(key), url.QueryEscape(m[key]))
 	}
 	return strings.Join(values, "&")
 }
