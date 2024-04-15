@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"slices"
@@ -16,7 +19,7 @@ import (
 )
 
 type ITwitterSdk interface {
-	Post(message string) error
+	Tweet(message string) error
 }
 
 type twitterSdk struct {
@@ -26,18 +29,35 @@ func NewTwitterSdk() ITwitterSdk {
 	return &twitterSdk{}
 }
 
-func (s *twitterSdk) Post(message string) error {
-	body := map[string]interface{}{
+const TWEET_ENDPOINT = "https://api.twitter.com/2/tweets"
+const TWEET_HTTP_METHOD = "POST"
+
+func (s *twitterSdk) Tweet(message string) error {
+	body := map[string]string{
 		"text": message,
 	}
-	header := map[string]string{
-		"authorization": fmt.Sprintf(
-			"OAuth oauth_consumer_key=%s, oauth_token=%s, oauth_version=1.0",
-			os.Getenv("TWITTER_CONSUMER_KEY"),
-			os.Getenv("TWITTER_ACCESS_TOKEN"),
-		),
+	creds := &credentials{
+		ConsumerKey:       os.Getenv("TWITTER_API_KEY"),
+		ConsumerSecret:    os.Getenv("TWITTER_API_KEY_SECRET"),
+		AccessToken:       os.Getenv("TWITTER_ACCESS_TOKEN"),
+		AccessTokenSecret: os.Getenv("TWITTER_ACCESS_TOKEN_SECRET"),
 	}
-	fmt.Println(body, header)
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(TWEET_HTTP_METHOD, TWEET_ENDPOINT, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", getOauthAuth(creds, body, TWEET_HTTP_METHOD, TWEET_ENDPOINT))
+	resp, err := new(http.Client).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
 	return nil
 }
 
