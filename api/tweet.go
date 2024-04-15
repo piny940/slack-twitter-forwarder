@@ -60,7 +60,7 @@ type credentials struct {
 	AccessTokenSecret string
 }
 
-func getOauthAuth(creds *credentials, additionalParam map[string]string, httpMethod, uri string) string {
+func getOauthAuth(creds *credentials, params map[string]string, httpMethod, uri string) string {
 	m := map[string]string{}
 	m["oauth_consumer_key"] = creds.ConsumerKey
 	m["oauth_nonce"] = getOauthNonce()
@@ -69,16 +69,9 @@ func getOauthAuth(creds *credentials, additionalParam map[string]string, httpMet
 	m["oauth_token"] = creds.AccessToken
 	m["oauth_version"] = "1.0"
 
-	baseQueryString := sortedQueryString(mapMerge(m, additionalParam))
-
-	base := []string{}
-	base = append(base, url.QueryEscape(httpMethod))
-	base = append(base, url.QueryEscape(uri))
-	base = append(base, url.QueryEscape(baseQueryString))
-
-	signatureBase := strings.Join(base, "&")
-
-	signatureKey := url.QueryEscape(creds.ConsumerSecret) + "&" + url.QueryEscape(creds.AccessTokenSecret)
+	paramsString := sortedQueryString(mapMerge(m, params))
+	signatureBase := getSignatureBaseString(httpMethod, uri, paramsString)
+	signatureKey := getSigningKey(creds)
 
 	m["oauth_signature"] = calcHMACSHA1(signatureBase, signatureKey)
 
@@ -95,6 +88,21 @@ func getOauthAuth(creds *credentials, additionalParam map[string]string, httpMet
 	return authHeader
 }
 
+func getSignatureBaseString(httpMethod, uri, paramsString string) string {
+	base := []string{}
+	base = append(base, url.QueryEscape(httpMethod))
+	base = append(base, url.QueryEscape(uri))
+	base = append(base, url.QueryEscape(paramsString))
+	return strings.Join(base, "&")
+}
+
+func getSigningKey(creds *credentials) string {
+	return fmt.Sprintf("%s&%s",
+		url.QueryEscape(creds.ConsumerSecret),
+		url.QueryEscape(creds.AccessTokenSecret),
+	)
+}
+
 func mapMerge(m1, m2 map[string]string) map[string]string {
 	m := map[string]string{}
 
@@ -108,12 +116,12 @@ func mapMerge(m1, m2 map[string]string) map[string]string {
 }
 
 func sortedQueryString(m map[string]string) string {
-	keys := make([]string, len(m))
-	for key, _ := range m {
+	keys := make([]string, 0)
+	for key := range m {
 		keys = append(keys, key)
 	}
 
-	slices.Sort[[]string](keys)
+	slices.Sort(keys)
 
 	values := make([]string, len(keys))
 	for i, key := range keys {
